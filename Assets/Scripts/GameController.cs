@@ -22,6 +22,7 @@ public class GameController : MonoBehaviour
         // Arm details
         private float armLength = 2.5f;
         private float armMaxLength = 5;
+        private float stretch = 1f;
         private int armSegments = 10;
         public GameObject segment;
         private GameObject[] rightSegments;
@@ -58,115 +59,63 @@ public class GameController : MonoBehaviour
                 Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
 
                 /*
-                 * Selecting hands
+                 * Selecting head
                  */
                 if (Input.GetMouseButtonDown(0)) {
                         // Selecting head
                         if ((mousePosition - (Vector2)head.transform.position).magnitude < 0.5f) {
                                 selected = head;
                         }
-                        // Selecting hands
-                        else if ((mousePosition - (Vector2)rightHand.transform.position).magnitude < 0.25f)
-                        {
-                                selected = rightHand;
-                                handCoef = 1;
-                                rightLocked = false;
-                        }
-                        else if ((mousePosition - (Vector2)leftHand.transform.position).magnitude < 0.25f)
-                        {
-                                selected = leftHand;
-                                handCoef = -1;
-                                leftLocked = false;
-                        }
                 }
                 // Dragging body parts
                 if (Input.GetMouseButton(0)) {
                         // Dragging head
                         if (selected == head) {
-                                //If at least one hand is locked
-                                if (rightLocked || leftLocked)
+                                //Only draggable if both hands are available
+                                if (rightLocked && leftLocked)
                                 {
                                         // Midpoint of hands
-                                        Vector3 midpoint;
-                                        if (leftLocked && rightLocked)
-                                        {
-                                                midpoint = (leftHand.transform.position + rightHand.transform.position) / 2;
-                                        }
-                                        else if (leftLocked)
-                                        {
-                                                midpoint = leftHand.transform.position;
-                                        }
-                                        else {
-                                                midpoint = rightHand.transform.position;
-                                        }
-                                        float ang;
-                                        float midDis;
+                                        Vector3 midpoint = (leftHand.transform.position + rightHand.transform.position) / 2;
+
+                                        // Other values used in calculations
                                         Vector3 displacement = (Vector3)mousePosition - midpoint;
-                                        // If both hands are locked
-                                        if (leftLocked && rightLocked)
-                                        {
-                                                Vector3 handLine = rightHand.transform.position - leftHand.transform.position;
-                                                ang = Mathf.Acos(Vector3.Dot(handLine, displacement) / (displacement.magnitude * handLine.magnitude));
-                                                midDis = handLine.magnitude / 2 - socketPos.magnitude;
+                                        Vector3 handLine = rightHand.transform.position - leftHand.transform.position;
+                                        float ang = Mathf.Acos(Vector3.Dot(handLine, displacement) / (displacement.magnitude * handLine.magnitude));
+                                        float midDis = handLine.magnitude / 2 - socketPos.magnitude;
 
-                                        }
 
-                                        // Otherwise, only one hand is locked
-                                        else {
-                                                ang = Mathf.PI - Mathf.Acos(Vector3.Dot(socketPos, displacement) / (displacement.magnitude * socketPos.magnitude));
-                                                midDis = socketPos.magnitude;
-                                        }
                                         // Finding furthest either hand could stretch
-                                        // Only include if hand is locked
-                                        float maxLeft = Mathf.Infinity;
-                                        if (leftLocked) maxLeft = SolveQuad(1, -2 * midDis * Mathf.Cos(Mathf.PI - ang), midDis * midDis - armMaxLength * armMaxLength);
-                                        float maxRight = Mathf.Infinity;
-                                        if (rightLocked) maxRight = SolveQuad(1, -2 * midDis * Mathf.Cos(ang), midDis * midDis - armMaxLength * armMaxLength);
+                                        float maxLeft = SolveQuad(1, -2 * midDis * Mathf.Cos(Mathf.PI - ang), midDis * midDis - armMaxLength * armMaxLength);
+                                        float maxRight = SolveQuad(1, -2 * midDis * Mathf.Cos(ang), midDis * midDis - armMaxLength * armMaxLength);
                                         // Choosing length that satisfies all distances
-                                        selected.transform.position = midpoint + displacement.normalized * Mathf.Min(displacement.magnitude, maxLeft, maxRight);
+                                        //selected.transform.position = midpoint + displacement.normalized * Mathf.Min(displacement.magnitude, maxLeft, maxRight);
+                                        moveTowards(midpoint + displacement.normalized * Mathf.Min(displacement.magnitude, maxLeft, maxRight));
                                 }
 
-                        }
-                        // Dragging hands
-                        else if (selected != null)
-                        {
-                                // Bounding length from other hand
-                                if (((Vector3)mousePosition - (head.transform.position + handCoef * socketPos)).magnitude > armLength)
-                                {
-                                        selected.transform.position = ((Vector3)mousePosition -
-                                                (head.transform.position + handCoef * socketPos)).normalized * armLength
-                                                + head.transform.position + handCoef * socketPos;
-                                }
-                                else
-                                        selected.transform.position = mousePosition;
                         }
                 }
-                // Releasing hands
+                // Releasing
                 if (Input.GetMouseButtonUp(0))
                 {
-                        if (selected == rightHand)
-                        {
-                                rightCont.velocity = Vector2.zero;
-                                rightLocked = HasTile(rightHand.transform.position);
-                        }
-                        if (selected == leftHand)
-                        {
-                                leftCont.velocity = Vector2.zero;
-                                leftLocked = HasTile(leftHand.transform.position);
-                        }
-
                         selected = null;
                 }
 
                 // Moving hands towards keys
+                if (Input.GetKeyDown(KeyCode.Q)) {
+                        // Disable physics
+                        leftLocked = false;
+                        leftCont.velocity = Vector2.zero;
+                        //TODO: fix this
+                        selected = null;
+                }
                 if (Input.GetKey(KeyCode.Q))
                 {
                         // Bounding length from other hand
                         Vector3 desiredPosition;
-                        if (((Vector3)mousePosition - (head.transform.position - socketPos)).magnitude > armLength)
+                        if (((Vector3)mousePosition - (head.transform.position - socketPos)).magnitude > armLength + stretch)
                         {
                                 desiredPosition = ((Vector3)mousePosition -
-                                        (head.transform.position - socketPos)).normalized * armLength
+                                        (head.transform.position - socketPos)).normalized * (armLength + stretch)
                                         + head.transform.position - socketPos;
                         }
                         else
@@ -176,21 +125,36 @@ public class GameController : MonoBehaviour
                         }
 
                         leftHand.transform.position = Vector3.Lerp(leftHand.transform.position, desiredPosition, 0.1f);
+
+                }
+                // Physics
+                else if (!leftLocked) {
+                        leftCont.PhysicsCalc(new Vector3(0, -5));
                 }
 
+                // Grasping
                 if (Input.GetKeyUp(KeyCode.Q))
                 {
                         leftLocked = HasTile(leftHand.transform.position);
+                }
+                // Moving hands towards keys
+                if (Input.GetKeyDown(KeyCode.E))
+                {
+                        // Disable physics
+                        rightLocked = false;
+                        rightCont.velocity = Vector2.zero;
+                        //TODO: fix this
+                        selected = null;
                 }
                 // Moving hands towards keys
                 if (Input.GetKey(KeyCode.E))
                 {
                         // Bounding length from other hand
                         Vector3 desiredPosition;
-                        if (((Vector3)mousePosition - (head.transform.position + socketPos)).magnitude > armLength)
+                        if (((Vector3)mousePosition - (head.transform.position + socketPos)).magnitude > armLength + stretch)
                         {
                                 desiredPosition = ((Vector3)mousePosition -
-                                        (head.transform.position + socketPos)).normalized * armLength
+                                        (head.transform.position + socketPos)).normalized * (armLength + stretch)
                                         + head.transform.position + socketPos;
                         }
                         else
@@ -200,11 +164,22 @@ public class GameController : MonoBehaviour
                         }
 
                         rightHand.transform.position = Vector3.Lerp(rightHand.transform.position, desiredPosition, 0.1f);
+
+
+                        //TODO: fix this
+                        rightCont.velocity = Vector2.zero;
                 }
+                // Physics
+                else if (!rightLocked) {
+                        rightCont.PhysicsCalc(new Vector3(0, -5));
+                }
+                // Grasping
                 if (Input.GetKeyUp(KeyCode.E))
                 {
                         rightLocked = HasTile(rightHand.transform.position);
                 }
+
+
                 // Toggling hand grips
                 if (Input.GetKeyDown(KeyCode.A)) {
                         rightLocked = !rightLocked;
@@ -216,10 +191,8 @@ public class GameController : MonoBehaviour
                         rightLocked = false;
                         leftLocked = false;
                 }
-                // Physics
-                if (!rightLocked && selected != rightHand) rightCont.PhysicsCalc(new Vector3(0, -5));
-                if (!leftLocked && selected != leftHand) leftCont.PhysicsCalc(new Vector3(0, -5));
 
+                // Head physics
                 if (selected != head) PhysicsCalc(new Vector3(0, -5));
                 else velocity = Vector2.zero;
 
@@ -227,28 +200,28 @@ public class GameController : MonoBehaviour
                 // Colors TODO: fix this
                 if (rightLocked)
                 {
-                        rightCont.GetComponent<SpriteRenderer>().color = Color.black;
+                        rightCont.handState = true;
                 }
                 else
                 {
-                        rightCont.GetComponent<SpriteRenderer>().color = Color.white;
+                        rightCont.handState = false;
                 }
                 if (leftLocked)
                 {
-                        leftCont.GetComponent<SpriteRenderer>().color = Color.black;
+                        leftCont.handState = true;
                 }
                 else
                 {
-                        leftCont.GetComponent<SpriteRenderer>().color = Color.white;
+                        leftCont.handState = false;
                 }
 
                 // Draw arm
-                DrawArm(leftHand.transform.position, head.transform.position - new Vector3(0.2f, 0), leftSegments);
+                leftCont.SetAngle(DrawArm(leftHand.transform.position, head.transform.position - new Vector3(0.2f, 0), leftSegments));
 
-                DrawArm(rightHand.transform.position, head.transform.position + new Vector3(0.2f, 0), rightSegments);
+                rightCont.SetAngle(DrawArm(rightHand.transform.position, head.transform.position + new Vector3(0.2f, 0), rightSegments));
         }
-
-        void DrawArm(Vector2 first, Vector2 second, GameObject[] segments)
+        // Draws a catenary curve between the two positions, returns the angle the hand should be at
+        float DrawArm(Vector2 first, Vector2 second, GameObject[] segments)
         {
 
                 // Calculating which object is on the left and right
@@ -298,6 +271,7 @@ public class GameController : MonoBehaviour
                                         yPos = Mathf.Abs(((float) i + 1) / ((float) armSegments + 1) * armLength - (top.y - bottom.y) - droop) - droop;
                                         segments[i].transform.position = new Vector2(left.x, bottom.y + yPos);
                                 }
+                                return 0;
                                 
                         }
                         else
@@ -333,6 +307,15 @@ public class GameController : MonoBehaviour
                                         // Place segment at that location
                                         segments[i].transform.position = new Vector2(xPos, yPos);
                                 }
+                                // TODO: fix this, also calculate one step ahead, instead of using previous steps
+                                if (first.x > second.x)
+                                {
+                                        return AccurateTan(segments[armSegments - 1].transform.position - segments[armSegments - 2].transform.position) * Mathf.Rad2Deg - 90;
+                                }
+                                else {
+
+                                        return AccurateTan(segments[0].transform.position - segments[1].transform.position) * Mathf.Rad2Deg - 90;
+                                }
                         }
                 }
                 // Stretched arm
@@ -347,6 +330,8 @@ public class GameController : MonoBehaviour
                         {
                                 segments[i].transform.position = left + dif / (armSegments + 1) * (i + 1);
                         }
+
+                        return AccurateTan(first - second) * Mathf.Rad2Deg - 90;
                 }
 
         }
@@ -388,18 +373,35 @@ public class GameController : MonoBehaviour
                 acceleration = external * 3;
 
                 // Adding in acceleration from hands
-                if (rightLocked) {
-                        Vector3 displacement = rightHand.transform.position - (head.transform.position + socketPos);
-                        float pull = Mathf.Max(displacement.magnitude - armLength, 0);
+                Vector3 displacement;
+                float pull;
+                if (rightLocked)
+                {
+                        displacement = rightHand.transform.position - (head.transform.position + socketPos);
+                        pull = Mathf.Max(displacement.magnitude - armLength, 0);
 
                         acceleration += 60 * displacement.normalized * pull;
                 }
+                else if (Input.GetKey(KeyCode.E))
+                {
+                        displacement = rightHand.transform.position - (head.transform.position + socketPos);
+                        pull = Mathf.Max(displacement.magnitude - armLength, 0);
+
+                        acceleration += 10 * displacement.normalized * pull;
+                }
                 if (leftLocked)
                 {
-                        Vector3 displacement = leftHand.transform.position - (head.transform.position - socketPos);
-                        float pull = Mathf.Max(displacement.magnitude - armLength, 0);
+                        displacement = leftHand.transform.position - (head.transform.position - socketPos);
+                        pull = Mathf.Max(displacement.magnitude - armLength, 0);
 
                         acceleration += 60 * displacement.normalized * pull;
+                }
+                else if (Input.GetKey(KeyCode.Q))
+                {
+                        displacement = leftHand.transform.position - (head.transform.position - socketPos);
+                        pull = Mathf.Max(displacement.magnitude - armLength, 0);
+
+                        acceleration += 10 * displacement.normalized * pull;
                 }
 
                 // FInd potential position
@@ -454,8 +456,57 @@ public class GameController : MonoBehaviour
 
 
         }
+        // Moves the head in a direction until it reaches a wall
+        void moveTowards(Vector3 position) {
+                Vector3 potentialPosition;
+                if ((position - head.transform.position).magnitude < 20 * Time.deltaTime)
+                {
+                        potentialPosition = position;
+                }
+                else
+                {
+                        velocity = (position - head.transform.position).normalized * 20;
+                        potentialPosition = head.transform.position + Time.deltaTime * velocity;
+                }
+                // First check horizontal position
+                if (HasTile(new Vector3(potentialPosition.x, head.transform.position.y)))
+                {
+                        if (head.transform.position.x < potentialPosition.x)
+                        {
+                                potentialPosition.x = Mathf.Floor(potentialPosition.x * 2) / 2 - 0.01f; ;
+                        }
+                        else
+                        {
+                                potentialPosition.x = Mathf.Ceil(potentialPosition.x * 2) / 2 + 0.01f; ;
 
+                        }
+                }
+
+                // Then check vertical position
+                if (HasTile(new Vector3(head.transform.position.x, potentialPosition.y)))
+                {
+                        if (head.transform.position.y < potentialPosition.y)
+                        {
+                                potentialPosition.y = Mathf.Floor(potentialPosition.y * 2) / 2 - 0.01f; ;
+                        }
+                        else
+                        {
+                                potentialPosition.y = Mathf.Ceil(potentialPosition.y * 2) / 2 + 0.01f;
+                        }
+                }
+                head.transform.position = potentialPosition;
+        }
+        // Checks if there is a collision tile at that specific point
         bool HasTile(Vector3 pos) {
                 return tiles.HasTile(new Vector3Int((int)Mathf.Floor(pos.x * 2), (int) Mathf.Floor(pos.y * 2)));
+        }
+
+        // Returns a 0-2pi tan of the given direction
+        float AccurateTan(Vector2 dir) {
+                float ret = Mathf.Atan(dir.y / dir.x);
+                if (dir.x < 0) {
+                        ret = Mathf.PI + ret;
+                }
+                return ret;
         }
 }

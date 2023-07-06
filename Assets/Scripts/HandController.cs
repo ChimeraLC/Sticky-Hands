@@ -13,15 +13,26 @@ public class HandController : MonoBehaviour
         public float armLength = 2.5f;
         public float armMaxLength = 5;
 
+        // Whether the hand is gripping or not
+        public bool handState = false;
+        private GameObject[] fingers = new GameObject[3];
         void Start()
         {
                 velocity = Vector2.zero;
+                for (int i = 0; i < 3; i++)
+                {
+                        fingers[i] = gameObject.transform.GetChild(i).gameObject;
+                }
         }
 
         // Update is called once per frame
         void Update()
         {
-                
+                // Update sprites
+                for (int i = 0; i < 3; i++)
+                {
+                        fingers[i].SetActive(!handState);
+                }
         }
 
         // Calculates the physics for an unlocked hand, with applied acceleration 'external'
@@ -55,5 +66,9 @@ public class HandController : MonoBehaviour
 
                 // Air resistance
                 velocity *= Mathf.Pow(0.6f, Time.deltaTime);
+        }
+
+        public void SetAngle(float ang) {
+                transform.eulerAngles = Vector3.forward * ang;
         }
 }
