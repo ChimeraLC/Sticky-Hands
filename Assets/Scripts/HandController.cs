@@ -10,8 +10,8 @@ public class HandController : MonoBehaviour
         public Vector3 velocity;
         public Vector3 acceleration;
         public Vector3 socketPos;
-        public float armLength = 2f;
-        public float armMaxLength = 4;
+        public float armLength;
+        public float armMaxLength;
 
         // Whether the hand is gripping or not
         public bool handState = false;
