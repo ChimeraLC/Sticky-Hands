@@ -4,6 +4,7 @@ using Unity.VisualScripting;
 using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Tilemaps;
+using UnityEngine.XR;
 using static UnityEditor.PlayerSettings;
 
 public class GameController : MonoBehaviour
@@ -11,34 +12,41 @@ public class GameController : MonoBehaviour
         // Hands
         public GameObject leftHand;
         public GameObject rightHand;
-        public GameObject head;
         private HandController leftCont;
         private HandController rightCont;
-        private GameObject selected;
         private bool leftLocked = true;
         private bool rightLocked = true;
         private float handCoef = 1;
-        private Vector3 socketPos = new Vector3(0.2f, 0);
+
+
+        public GameObject head;
+        private GameObject selected;
+
         // Arm details
-        private float armLength = 2.5f;
-        private float armMaxLength = 5;
-        private float stretch = 1f;
-        private int armSegments = 10;
+        private float armLength = 2f;
+        private float armMaxLength = 4f;
+        private float stretch = 2f;
+        private int armSegments = 15;
+        // Displacement from center where arms extend from
+        private Vector3 socketPos = new Vector3(0.2f, 0);
+        // Segment prefabs
         public GameObject segment;
         private GameObject[] rightSegments;
         private GameObject[] leftSegments;
+
         // State control
         private int state = 1;
 
         // Collision
         public Tilemap tiles;
-        public Vector3 velocity;
-        public Vector3 acceleration;
+        public Tilemap grabTiles;
+        public Vector3 velocity = Vector3.zero;
+        public Vector3 acceleration = Vector3.zero;
 
         // Start is called before the first frame update
         void Start()
         {
-                // Grabbing controllers
+                // Getting hand controllers
                 leftCont = leftHand.GetComponent<HandController>();
                 rightCont = rightHand.GetComponent<HandController>();
                 // Creating arm segments
@@ -59,17 +67,18 @@ public class GameController : MonoBehaviour
                 Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
 
                 /*
-                 * Selecting head
-                 */
+                 * Dragging head
+                 
                 if (Input.GetMouseButtonDown(0)) {
                         // Selecting head
                         if ((mousePosition - (Vector2)head.transform.position).magnitude < 0.5f) {
                                 selected = head;
                         }
                 }
+                
                 // Dragging body parts
                 if (Input.GetMouseButton(0)) {
-                        // Dragging head
+                        // Dragging head if selected
                         if (selected == head) {
                                 //Only draggable if both hands are available
                                 if (rightLocked && leftLocked)
@@ -83,7 +92,7 @@ public class GameController : MonoBehaviour
                                         float ang = Mathf.Acos(Vector3.Dot(handLine, displacement) / (displacement.magnitude * handLine.magnitude));
                                         float midDis = handLine.magnitude / 2 - socketPos.magnitude;
 
-
+                                        // TODO: fix something in the calculations
                                         // Finding furthest either hand could stretch
                                         float maxLeft = SolveQuad(1, -2 * midDis * Mathf.Cos(Mathf.PI - ang), midDis * midDis - armMaxLength * armMaxLength);
                                         float maxRight = SolveQuad(1, -2 * midDis * Mathf.Cos(ang), midDis * midDis - armMaxLength * armMaxLength);
@@ -99,7 +108,14 @@ public class GameController : MonoBehaviour
                 {
                         selected = null;
                 }
+                */
 
+                // Control hands
+                // TODO: combine socketcoef with handNum
+                Handle(mousePosition, KeyCode.E, rightCont, 1, rightLocked, 1);
+                Handle(mousePosition, KeyCode.Q, leftCont, 2, leftLocked, -1);
+
+                /*
                 // Moving hands towards keys
                 if (Input.GetKeyDown(KeyCode.Q)) {
                         // Disable physics
@@ -137,6 +153,8 @@ public class GameController : MonoBehaviour
                 {
                         leftLocked = HasTile(leftHand.transform.position);
                 }
+
+
                 // Moving hands towards keys
                 if (Input.GetKeyDown(KeyCode.E))
                 {
@@ -178,7 +196,7 @@ public class GameController : MonoBehaviour
                 {
                         rightLocked = HasTile(rightHand.transform.position);
                 }
-
+                */
 
                 // Toggling hand grips
                 if (Input.GetKeyDown(KeyCode.A)) {
@@ -193,8 +211,14 @@ public class GameController : MonoBehaviour
                 }
 
                 // Head physics
-                if (selected != head) PhysicsCalc(new Vector3(0, -5));
-                else velocity = Vector2.zero;
+                if (!Input.GetKey(KeyCode.Space)) { 
+                        PhysicsCalc(new Vector3(0, -5)); 
+                }
+                else { 
+                        PhysicsCalc(new Vector3(0, -50));
+                }
+                //else velocity = Vector2.zero;
+
 
 
                 // Colors TODO: fix this
@@ -307,14 +331,14 @@ public class GameController : MonoBehaviour
                                         // Place segment at that location
                                         segments[i].transform.position = new Vector2(xPos, yPos);
                                 }
-                                // TODO: fix this, also calculate one step ahead, instead of using previous steps
+                                // Calculating directino hand should face
                                 if (first.x > second.x)
                                 {
-                                        return AccurateTan(segments[armSegments - 1].transform.position - segments[armSegments - 2].transform.position) * Mathf.Rad2Deg - 90;
+                                        return AccurateTan(new Vector2(1, (float)System.Math.Sinh((first.x - b) / a))) * Mathf.Rad2Deg - 90;
                                 }
                                 else {
 
-                                        return AccurateTan(segments[0].transform.position - segments[1].transform.position) * Mathf.Rad2Deg - 90;
+                                        return AccurateTan(new Vector2(1, (float)System.Math.Sinh((first.x - b) / a))) * Mathf.Rad2Deg + 90;
                                 }
                         }
                 }
@@ -322,9 +346,11 @@ public class GameController : MonoBehaviour
                 else
                 {
                         Vector2 dif = right - left;
+                        /*
                         if (dif.magnitude > armMaxLength) {
                                 dif = armMaxLength * dif.normalized;
                         }
+                        */
                         // Placing arm segments
                         for (int i = 0; i < armSegments; i++)
                         {
@@ -368,6 +394,60 @@ public class GameController : MonoBehaviour
                         return ( -b + Mathf.Sqrt(b * b - 4 * a * c) ) / (2 * a);
         }
 
+        // Helper function for dragging and releasing hands
+        void Handle(Vector3 mousePosition, KeyCode key, HandController hand, int handNum, bool lockedState, int socketCoef) {
+
+                // Moving hands towards keys
+                if (Input.GetKeyDown(key))
+                {
+                        // Disable physics
+                        SetHandLock(handNum, false);
+                        hand.velocity = Vector2.zero;
+                        //TODO: fix this
+                        selected = null;
+                }
+                if (Input.GetKey(key))
+                {
+                        // Bounding length from other hand
+                        Vector3 desiredPosition;
+                        if (((Vector3)mousePosition - (head.transform.position + socketCoef *  socketPos)).magnitude > armLength + stretch)
+                        {
+                                desiredPosition = ((Vector3)mousePosition -
+                                        (head.transform.position + socketCoef * socketPos)).normalized * (armLength + stretch)
+                                        + head.transform.position + socketCoef * socketPos;
+                        }
+                        else
+                        {
+                                desiredPosition = mousePosition;
+
+                        }
+
+                        hand.transform.position = Vector3.Lerp(hand.transform.position, desiredPosition, 0.1f);
+
+                }
+                else if (!lockedState)
+                {
+                        hand.PhysicsCalc(new Vector3(0, -5));
+                }
+                // Grasping
+                if (Input.GetKeyUp(key))
+                {
+                        SetHandLock(handNum, HasGrabTile(hand.transform.position));
+                }
+
+        }
+        // Helper function to avoid pointer use
+        void SetHandLock(int hand, bool state) {
+                if (hand == 1)
+                {
+                        rightLocked = state;
+                }
+                else {
+                        leftLocked = state;
+                }
+        }
+
+        // Calculates physics for the head
         void PhysicsCalc(Vector3 external)
         {
                 acceleration = external * 3;
@@ -375,6 +455,7 @@ public class GameController : MonoBehaviour
                 // Adding in acceleration from hands
                 Vector3 displacement;
                 float pull;
+                // TODO: clean this up
                 if (rightLocked)
                 {
                         displacement = rightHand.transform.position - (head.transform.position + socketPos);
@@ -387,7 +468,7 @@ public class GameController : MonoBehaviour
                         displacement = rightHand.transform.position - (head.transform.position + socketPos);
                         pull = Mathf.Max(displacement.magnitude - armLength, 0);
 
-                        acceleration += 10 * displacement.normalized * pull;
+                        acceleration += 6 * displacement.normalized * pull;
                 }
                 if (leftLocked)
                 {
@@ -401,7 +482,7 @@ public class GameController : MonoBehaviour
                         displacement = leftHand.transform.position - (head.transform.position - socketPos);
                         pull = Mathf.Max(displacement.magnitude - armLength, 0);
 
-                        acceleration += 10 * displacement.normalized * pull;
+                        acceleration += 6 * displacement.normalized * pull;
                 }
 
                 // FInd potential position
@@ -416,15 +497,17 @@ public class GameController : MonoBehaviour
                 {       
                         velocity *= Mathf.Pow(0.4f, Time.deltaTime);
                 }
+
+                //Debug.Log((head.transform.position, acceleration, velocity, potentialPosition, Time.deltaTime));
                 // First check horizontal position
                 if (HasTile(new Vector3(potentialPosition.x, head.transform.position.y))) {
                         if (head.transform.position.x < potentialPosition.x)
                         {
-                                potentialPosition.x = Mathf.Floor(potentialPosition.x * 2) / 2 - 0.01f; ;
+                                potentialPosition.x = Mathf.Floor(potentialPosition.x * 2) / 2 - 0.01f;
                         }
                         else
                         {
-                                potentialPosition.x = Mathf.Ceil(potentialPosition.x * 2) / 2 + 0.01f; ;
+                                potentialPosition.x = Mathf.Ceil(potentialPosition.x * 2) / 2;
 
                         }
                         velocity.x = 0;
@@ -435,11 +518,11 @@ public class GameController : MonoBehaviour
                 {
                         if (head.transform.position.y < potentialPosition.y)
                         {
-                                potentialPosition.y = Mathf.Floor(potentialPosition.y * 2) / 2 - 0.01f; ;
+                                potentialPosition.y = Mathf.Floor(potentialPosition.y * 2) / 2 - 0.01f;
                         }
                         else
                         {
-                                potentialPosition.y = Mathf.Ceil(potentialPosition.y * 2) / 2 + 0.01f;
+                                potentialPosition.y = Mathf.Ceil(potentialPosition.y * 2) / 2;
                         }
                         velocity.y = 0;
                         // Friction
@@ -452,7 +535,15 @@ public class GameController : MonoBehaviour
                                 velocity.x = Mathf.Min(0, velocity.x + 50 * Time.deltaTime);
                         }
                 }
-                head.transform.position = potentialPosition;
+                // TODO: fix the calculations here?
+                if (HasTile(potentialPosition))
+                {
+                        Debug.Log("Failed");
+                }
+                else
+                {
+                        head.transform.position = potentialPosition;
+                }
 
 
         }
@@ -499,6 +590,10 @@ public class GameController : MonoBehaviour
         // Checks if there is a collision tile at that specific point
         bool HasTile(Vector3 pos) {
                 return tiles.HasTile(new Vector3Int((int)Mathf.Floor(pos.x * 2), (int) Mathf.Floor(pos.y * 2)));
+        }
+        bool HasGrabTile(Vector3 pos)
+        {
+                return grabTiles.HasTile(new Vector3Int((int)Mathf.Floor(pos.x * 2), (int)Mathf.Floor(pos.y * 2)));
         }
 
         // Returns a 0-2pi tan of the given direction
