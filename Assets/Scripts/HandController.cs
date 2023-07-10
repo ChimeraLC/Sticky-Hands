@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -13,6 +14,19 @@ public class HandController : MonoBehaviour
         public float armLength;
         public float armMaxLength;
 
+
+        public GameObject handMain;
+        public GameController gameController;
+        public Hand hand;
+        public TextMeshProUGUI textTop;
+        public TextMeshProUGUI textBottom;
+        public KeyCode holdKey;
+        public KeyCode moveKey;
+
+        // Lifetime
+        float lifetime = 0f;
+        float lifetimeMax = 10f;
+
         // Whether the hand is gripping or not
         public bool handState = false;
         private GameObject[] fingers = new GameObject[3];
@@ -21,10 +35,16 @@ public class HandController : MonoBehaviour
                 velocity = Vector2.zero;
                 for (int i = 0; i < 3; i++)
                 {
-                        fingers[i] = gameObject.transform.GetChild(i).gameObject;
+                        fingers[i] = handMain.transform.GetChild(i).gameObject;
                 }
-        }
+                textTop.text = moveKey.ToString();
+                textBottom.text = holdKey.ToString();
 
+        }
+        public void UpdateText() {
+                textTop.text = moveKey.ToString();
+                textBottom.text = holdKey.ToString();
+         }
         // Update is called once per frame
         void Update()
         {
@@ -32,6 +52,12 @@ public class HandController : MonoBehaviour
                 for (int i = 0; i < 3; i++)
                 {
                         fingers[i].SetActive(!handState);
+                }
+                // Arm Lifetime
+                lifetime += Time.deltaTime;
+                if (lifetime > lifetimeMax) {
+                        gameController.Signal(hand);
+                        Destroy(gameObject);
                 }
         }
 
@@ -69,6 +95,6 @@ public class HandController : MonoBehaviour
         }
 
         public void SetAngle(float ang) {
-                transform.eulerAngles = Vector3.forward * ang;
+                handMain.transform.eulerAngles = Vector3.forward * ang;
         }
 }

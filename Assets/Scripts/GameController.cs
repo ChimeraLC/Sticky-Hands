@@ -27,8 +27,11 @@ public class GameController : MonoBehaviour
         // Segment prefabs
         public GameObject segment;
 
-        // State control
-        private int state = 1;
+        private List<KeyCode> possibleKeys = new List<KeyCode>(){ KeyCode.Q, KeyCode.W, KeyCode.E, KeyCode.R, KeyCode.T,
+                KeyCode.Y, KeyCode.U, KeyCode.I, KeyCode.O, KeyCode.P, KeyCode.A, KeyCode.S, KeyCode.D, KeyCode.F,
+                KeyCode.G, KeyCode.H, KeyCode.J, KeyCode.K, KeyCode.L, KeyCode.Z, KeyCode.X, KeyCode.C, KeyCode.V,
+                KeyCode.B, KeyCode.N, KeyCode.M};
+
 
         // Collision
         public Tilemap tiles;
@@ -42,8 +45,8 @@ public class GameController : MonoBehaviour
         void Start()
         {
                 // Creating initial hands
-                CreateHand(new Vector3(0.2f, 0), KeyCode.E);
-                CreateHand(new Vector3(-0.2f, 0), KeyCode.Q);
+                CreateHand(new Vector3(-0.2f, 0));
+                CreateHand(new Vector3(0, -0.2f));
         }
 
         // Update is called once per frame
@@ -67,7 +70,11 @@ public class GameController : MonoBehaviour
                 }
         }
         // Creates a new hand with the given offset and corresponding key
-        void CreateHand(Vector3 offset, KeyCode key) {
+        void CreateHand(Vector3 offset) {
+                // Generate random keys
+                KeyCode mKey = GetKey();
+                KeyCode hKey = GetKey();
+
                 // Creating gameobjects
                 GameObject hand = Instantiate(handPrefab);
                 GameObject[] arm = new GameObject[armSegments];
@@ -77,15 +84,25 @@ public class GameController : MonoBehaviour
                 }
 
                 // Creating object
-                Hand newHand = new Hand(key, offset, hand, arm);
+                Hand newHand = new Hand(mKey, hKey, offset, hand, arm);
 
                 // Setting values
                 newHand.handCont.head = head;
                 newHand.handCont.socketPos = offset;
                 newHand.handCont.armLength = armLength;
                 newHand.handCont.armMaxLength = armMaxLength;
-
+                newHand.handCont.moveKey = mKey;
+                newHand.handCont.holdKey = hKey;
+                newHand.handCont.gameController = this;
+                newHand.handCont.hand = newHand;
                 hands.Add(newHand);
+        }
+        // Returns a random key from the list of available keys
+        KeyCode GetKey() {
+                int index = Random.Range(0, possibleKeys.Count);
+                KeyCode ret = possibleKeys[index];
+                possibleKeys.RemoveAt(index);
+                return ret;
         }
 
         // Draws a catenary curve between the two positions, returns the angle the hand should be at
@@ -244,42 +261,46 @@ public class GameController : MonoBehaviour
         // Helper function for dragging and releasing hands
         void Handle(Vector3 mousePosition, Hand hand)
         {
-
-                // Moving hands towards keys
-                if (Input.GetKeyDown(hand.handKey))
-                {
-                        // Disable physics
+                // Release hand when trying to move (TODO: figure out if this is better or worse)
+                if (Input.GetKeyDown(hand.moveKey)) {
                         hand.handLock = false;
-                        hand.handCont.velocity = Vector2.zero;
-                        //TODO: fix this
                 }
-                if (Input.GetKey(hand.handKey))
+                // If hand is free to move
+                if (!hand.handLock)
                 {
-                        // Bounding length from other hand
-                        Vector3 desiredPosition;
-                        if (((Vector3)mousePosition - (head.transform.position + hand.handOffset)).magnitude > armLength + stretch)
+                        // Moving hands towards keys
+                        if (Input.GetKey(hand.moveKey))
                         {
-                                desiredPosition = ((Vector3)mousePosition -
-                                        (head.transform.position + hand.handOffset)).normalized * (armLength + stretch)
-                                        + head.transform.position + hand.handOffset;
+                                // Disable physics
+                                hand.handCont.velocity = Vector2.zero;
+                                // Bounding length from other hand
+                                Vector3 desiredPosition;
+                                if (((Vector3)mousePosition - (head.transform.position + hand.handOffset)).magnitude > armLength + stretch)
+                                {
+                                        desiredPosition = ((Vector3)mousePosition -
+                                                (head.transform.position + hand.handOffset)).normalized * (armLength + stretch)
+                                                + head.transform.position + hand.handOffset;
+                                }
+                                else
+                                {
+                                        desiredPosition = mousePosition;
+
+
+                                }
+                                hand.handObj.transform.position = Vector3.Lerp(hand.handObj.transform.position, desiredPosition, 0.1f);
                         }
                         else
                         {
-                                desiredPosition = mousePosition;
-
+                                hand.handCont.PhysicsCalc(new Vector3(0, -5));
                         }
-
-                        hand.handObj.transform.position = Vector3.Lerp(hand.handObj.transform.position, desiredPosition, 0.1f);
-
                 }
-                else if (!hand.handLock)
-                {
-                        hand.handCont.PhysicsCalc(new Vector3(0, -5));
+                if (Input.GetKeyDown(hand.holdKey)) {
+                        hand.handLock = HasTile(hand.handObj.transform.position);
                 }
                 // Grasping
-                if (Input.GetKeyUp(hand.handKey))
+                if (Input.GetKeyUp(hand.holdKey))
                 {
-                        hand.handLock = HasTile(hand.handObj.transform.position);
+                        hand.handLock = false;
                 }
 
                 // Animation state
@@ -305,7 +326,7 @@ public class GameController : MonoBehaviour
 
                                 acceleration += 40 * displacement.normalized * pull;
                         }
-                        else if (Input.GetKey(hand.handKey))
+                        else if (Input.GetKey(hand.moveKey))
                         {
                                 displacement = hand.handObj.transform.position - (head.transform.position + hand.handOffset);
                                 pull = Mathf.Max(displacement.magnitude - armLength, 0);
@@ -438,6 +459,16 @@ public class GameController : MonoBehaviour
                 }
                 return ret;
         }
+        // Signals a hand is dead and keys can be reclaimed
+        public void Signal(Hand hand) {
+                possibleKeys.Add(hand.moveKey);
+                possibleKeys.Add(hand.holdKey);
+                foreach (GameObject segment in hand.handArm) {
+                        Destroy(segment);
+                }
+                hands.Remove(hand);
+                CreateHand(Vector2.zero);
+        }
 }
 
 // Class containing info for each hand
@@ -452,16 +483,18 @@ public class Hand
         // Offset of hand from body
         public Vector3 handOffset { get; set; }
         // Key corresponding to hand
-        public KeyCode handKey { get; set; }
+        public KeyCode moveKey { get; set; }
+        public KeyCode holdKey { get; set; }
         // List of gameobjects making up arm
         public GameObject[] handArm { get; set; }
 
-        public Hand(KeyCode key, Vector3 offset, GameObject hand, GameObject[] arm) {
+        public Hand(KeyCode mKey, KeyCode hKey, Vector3 offset, GameObject hand, GameObject[] arm) {
                 handObj = hand;
                 handCont = hand.GetComponent<HandController>();
                 handLock = false;
                 handOffset = offset;
-                handKey = key;
+                moveKey = mKey;
+                holdKey = hKey;
                 handArm = arm;
 
         }

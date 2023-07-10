@@ -196,7 +196,7 @@ TilemapRenderer:
   m_LightmapParameters: {fileID: 0}
   m_SortingLayerID: 0
   m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingOrder: -10
   m_ChunkSize: {x: 32, y: 32, z: 32}
   m_ChunkCullingBounds: {x: 0, y: 0, z: 0}
   m_MaxChunkCount: 16
@@ -1834,7 +1834,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2c34bda86bb75e940a749200dc78bbf4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  handPrefab: {fileID: 7546862899964835758, guid: 35eb6d175d720bd45a647ca081faf32a, type: 3}
+  handPrefab: {fileID: 8512948892470162435, guid: 35eb6d175d720bd45a647ca081faf32a, type: 3}
   segmentPrefab: {fileID: 3562749323356200190, guid: 59afd781b3eb3be49b0138e866e768e3, type: 3}
   head: {fileID: 1148728864}
   segment: {fileID: 3562749323356200190, guid: 59afd781b3eb3be49b0138e866e768e3, type: 3}
