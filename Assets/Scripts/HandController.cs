@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEngine.UIElements;
 
 public class HandController : MonoBehaviour
@@ -19,31 +20,27 @@ public class HandController : MonoBehaviour
         public GameController gameController;
         public Hand hand;
         public TextMeshProUGUI textTop;
-        public TextMeshProUGUI textBottom;
-        public KeyCode holdKey;
-        public KeyCode moveKey;
+        public UnityEngine.UI.Image radialProgress;
+        public KeyCode handKey;
 
         // Lifetime
         float lifetime = 0f;
-        float lifetimeMax = 10f;
+        float lifetimeMax = Mathf.Infinity;
 
         // Whether the hand is gripping or not
         public bool handState = false;
         private GameObject[] fingers = new GameObject[3];
         void Start()
         {
-                velocity = Vector2.zero;
                 for (int i = 0; i < 3; i++)
                 {
                         fingers[i] = handMain.transform.GetChild(i).gameObject;
                 }
-                textTop.text = moveKey.ToString();
-                textBottom.text = holdKey.ToString();
+                textTop.text = handKey.ToString();
 
         }
         public void UpdateText() {
-                textTop.text = moveKey.ToString();
-                textBottom.text = holdKey.ToString();
+                textTop.text = handKey.ToString();
          }
         // Update is called once per frame
         void Update()
@@ -53,12 +50,15 @@ public class HandController : MonoBehaviour
                 {
                         fingers[i].SetActive(!handState);
                 }
-                // Arm Lifetime
-                lifetime += Time.deltaTime;
-                if (lifetime > lifetimeMax) {
-                        gameController.Signal(hand);
-                        Destroy(gameObject);
-                }
+        }
+
+        public void Signal() {
+                gameController.Signal(hand);
+                Destroy(gameObject);
+        }
+        // Updates radial loading bar
+        public void UpdateRadial(float percentage) {
+                radialProgress.fillAmount = percentage;
         }
 
         // Calculates the physics for an unlocked hand, with applied acceleration 'external'
@@ -70,7 +70,7 @@ public class HandController : MonoBehaviour
                 Vector3 displacement = head.transform.position + socketPos - transform.position;
 
                 // Pull if the arm is stretched
-                float pull = Mathf.Max(displacement.magnitude - armLength, 0);
+                float pull = Mathf.Max(displacement.magnitude - armLength + 1, 0);
 
                 acceleration += 30 * displacement.normalized * pull;
 
