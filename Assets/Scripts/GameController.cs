@@ -1,11 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using Unity.VisualScripting;
-using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.Tilemaps;
 using UnityEngine.XR;
-using static UnityEditor.PlayerSettings;
 
 public class GameController : MonoBehaviour
 {
@@ -19,14 +18,22 @@ public class GameController : MonoBehaviour
         private float lockTimer = 0.25f;
         private float armTimer = 0;
         // Arm details
-        private float armLength = 2.5f;
+        private float armLength = 2.25f;
         private float armMaxLength = 4f;
-        private float stretch = 1.5f;
+        private float stretch = 1.75f;
         private int armSegments = 15;
         // Displacement from center where arms extend from
         private Vector3 socketPos = new Vector3(0.2f, 0);
+        public bool simplified;
         // Segment prefabs
         public GameObject segment;
+
+        // Global timer
+        public bool started = false;
+        public float timer = 0;
+        public TextMeshProUGUI timerLarge;
+        public TextMeshProUGUI timerUI;
+        public TextMeshProUGUI finishUI;
 
         // Camera controll
         public GameObject currentCam;
@@ -63,17 +70,20 @@ public class GameController : MonoBehaviour
 
         public Vector3 velocity = Vector3.zero;
         public Vector3 acceleration = Vector3.zero;
-        private bool grounded = true;
 
         // Start is called before the first frame update
         void Start()
         {
+                Application.targetFrameRate = 30;
                 keyLists = new List<KeyCode>[]{ possibleKeysLeft, possibleKeysCenter, possibleKeysRight};
                 // Creating initial hands
                 CreateHand(new Vector3(-0.2f, 0), 0);
-                CreateHand(new Vector3(0, -0.2f), 2);
+                CreateHand(new Vector3(0, -0.2f), 1);
 
-                CreateHand(new Vector3(0.2f, 0), 1);
+                CreateHand(new Vector3(0.2f, 0), 2);
+
+                timerUI.enabled = false;
+                finishUI.enabled = false;
         }
 
         // Update is called once per frame
@@ -81,10 +91,34 @@ public class GameController : MonoBehaviour
         {
                 // Mouse position
                 Vector2 mousePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-
+                /*
                 // Debug controlls
                 if (Input.GetMouseButton(0)) {
                         head.transform.position = mousePosition;
+                }
+                */
+                // SImplified controls
+                if (!simplified && Input.GetKeyDown(KeyCode.Space)) {
+                        // Replace possible keys with less varied ones
+                        keyLists = new List<KeyCode>[] {new List<KeyCode>() {
+                                KeyCode.Q, KeyCode.A
+                        },
+                        possibleKeysCenter = new List<KeyCode>() {
+                                KeyCode.W, KeyCode.S
+                        },
+                        possibleKeysRight = new List<KeyCode>() {
+                                KeyCode.E, KeyCode.D
+                        }};
+                        // Destroy and create new hands
+                        foreach (Hand hand in hands.ToArray()) {
+                                hand.handCont.SignalNoResponse();
+                                hands.Remove(hand);
+                        }
+                        
+                        CreateHand(new Vector3(-0.2f, 0), 0);
+                        CreateHand(new Vector3(0, -0.2f), 1);
+                        CreateHand(new Vector3(0.2f, 0), 2);
+                        simplified = true;
                 }
 
                 // Control hands
@@ -117,6 +151,37 @@ public class GameController : MonoBehaviour
 
                         }
                 }
+
+                // Timer control:
+                if (started) {
+                        timer += Time.deltaTime;
+                        string time = ConvTime(timer);
+                        timerLarge.text = time;
+                        timerUI.text = time;
+                }
+        }
+        // Signal that player reached goal
+        public void FinishSignal() {
+                started = false;
+                finishUI.enabled = true;
+                finishUI.text = "You Won! \nYour final time was: " + ConvTime(timer);
+                timerUI.enabled = false;
+        }
+        // Converts a float time in seconds to a timer string
+        string ConvTime(float time) {
+                string ret = "";
+                ret += ((int)(time / 60)).ToString();
+                ret += ":";
+                if (time % 60 < 10) {
+                        ret += "0";
+                }
+                ret += (((int) (time % 60)).ToString());
+                ret += ":";
+                if ((timer * 100) % 100 < 10) {
+                        ret += "0";
+                }
+                ret += ((int)((timer * 100) % 100)).ToString();
+                return ret;
         }
         // Creates a new hand with the given offset and corresponding key
         void CreateHand(Vector3 offset, int keyType) {
@@ -156,7 +221,7 @@ public class GameController : MonoBehaviour
         }
 
         // Draws a catenary curve between the two positions, returns the angle the hand should be at
-        float DrawArm(Vector2 first, Vector2 second, GameObject[] segments, float shorter = 0)
+        public float DrawArm(Vector2 first, Vector2 second, GameObject[] segments, float shorter = 0)
         {
 
                 // Calculating which object is on the left and right
@@ -335,8 +400,8 @@ public class GameController : MonoBehaviour
                                 }
                                 hand.handObj.transform.position = Vector3.Lerp(hand.handObj.transform.position, desiredPosition, 0.1f);
 
-                                // Attatching
-                                if ((hand.handObj.transform.position - desiredPosition).magnitude < 0.5f && HasTile(hand.handObj.transform.position))
+                                // Attatching TODO: fix these values?
+                                if ((hand.handObj.transform.position - desiredPosition).magnitude < 1f && HasTile(hand.handObj.transform.position))
                                 {
                                         hand.handTimer = Mathf.Min(lockTimer, hand.handTimer + Time.deltaTime);
                                         if (hand.handTimer >= lockTimer) {
@@ -357,7 +422,10 @@ public class GameController : MonoBehaviour
                 // Grasping
                 if (Input.GetKeyUp(hand.handKey))
                 {
-                       hand.handCont.Signal();
+                        if (hand.handLock)
+                        {
+                                hand.handCont.Signal();
+                        }
                 }
 
                 hand.handCont.UpdateRadial(hand.handTimer / lockTimer);
@@ -374,7 +442,7 @@ public class GameController : MonoBehaviour
                 // Adding in acceleration from hands
                 Vector3 displacement;
                 float pull;
-                bool attatched = false;
+                int attatched = 0;
                 // TODO: clean this up
                 Vector3 handAcc = Vector3.zero;
                 foreach (Hand hand in hands) {
@@ -394,7 +462,9 @@ public class GameController : MonoBehaviour
                                 handAcc += 3 * displacement.normalized * pull;
                         }
 
-                        attatched = attatched || hand.handLock;
+                        if (hand.handLock) {
+                                attatched++;
+                        }
                 }
                 // Normalizing handAcc before including
                 if (handAcc.magnitude > external.magnitude * 2 / 3) {
@@ -406,7 +476,7 @@ public class GameController : MonoBehaviour
                 velocity += acceleration * Time.deltaTime;
                 //velocity *= Mathf.Pow(0.8f, Time.deltaTime);
 
-                if (attatched)
+                if (attatched > 0)
                 {
                         velocity *= Mathf.Pow(0.8f, Time.deltaTime);
                 }
@@ -440,21 +510,18 @@ public class GameController : MonoBehaviour
                         }
                         velocity.y = 0;
                         // Friction
+                        int fric = 25;
+                        if (attatched > 0) {
+                                fric = 10;
+                        }
                         if (velocity.x > 0)
                         {
-                                velocity.x = Mathf.Max(0, velocity.x - 10 * Time.deltaTime);
+                                velocity.x = Mathf.Max(0, velocity.x - fric * Time.deltaTime);
                         }
                         else
                         {
-                                velocity.x = Mathf.Min(0, velocity.x + 10 * Time.deltaTime);
+                                velocity.x = Mathf.Min(0, velocity.x + fric * Time.deltaTime);
                         }
-
-                        // Grounded state
-                        grounded = true;
-                }
-                else
-                {
-                        grounded = false;
                 }
                 // TODO: fix the calculations here?
                 if (HasTile(potentialPosition))
@@ -530,9 +597,6 @@ public class GameController : MonoBehaviour
         }
         // Signals a hand is dead and keys can be reclaimed
         public void Signal(Hand hand) {
-                foreach (GameObject segment in hand.handArm) {
-                        Destroy(segment);
-                }
                 handQueue.Add(hand);
                 hands.Remove(hand);
         }
